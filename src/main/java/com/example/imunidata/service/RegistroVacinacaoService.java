@@ -1,5 +1,6 @@
 package com.example.imunidata.service;
 
+import com.example.imunidata.model.ErrorResponse;
 import com.example.imunidata.model.RegistroVacinacao;
 import com.example.imunidata.repository.RegistroVacinacaoRepository;
 import com.opencsv.CSVReader;
@@ -69,9 +70,15 @@ public class RegistroVacinacaoService {
     }
 
     public RegistroVacinacao salvar(RegistroVacinacao registro) {
+        List<RegistroVacinacao> existentes = repository.findByVacinaIgnoreCaseAndEstadoIgnoreCaseAndMunicipioIgnoreCaseAndDoseIgnoreCase(
+                registro.getVacina(), registro.getEstado(), registro.getMunicipio(), registro.getDose());
+        if (!existentes.isEmpty()) {
+            throw new ErrorResponse.ResourceAlreadyExistsException(
+                    "Registro já existe para o município " + registro.getMunicipio() +
+                            ", estado " + registro.getEstado() +
+                            ", vacina " + registro.getVacina() +
+                            " e dose " + registro.getDose());
+        }
         return repository.save(registro);
     }
-
 }
-
-
