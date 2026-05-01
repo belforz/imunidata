@@ -14,5 +14,6 @@ public interface RegistroVacinacaoRepository extends JpaRepository<RegistroVacin
     List<RegistroVacinacao> findByEstadoIgnoreCase(String estado);
 
     List<RegistroVacinacao> findByVacinaIgnoreCaseAndEstadoIgnoreCase(String vacina, String estado);
-}
 
+    List<RegistroVacinacao> findByVacinaIgnoreCaseAndEstadoIgnoreCaseAndMunicipioIgnoreCaseAndDoseIgnoreCase(String vacina, String estado, String municipio, String dose);
+}

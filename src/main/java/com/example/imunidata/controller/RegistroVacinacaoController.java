@@ -1,5 +1,6 @@
 package com.example.imunidata.controller;
 
+import com.example.imunidata.model.ErrorResponse;
 import com.example.imunidata.model.RegistroVacinacao;
 import com.example.imunidata.service.RegistroVacinacaoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,12 +30,12 @@ public class RegistroVacinacaoController {
             @RequestParam(required = false) String vacina,
             @Parameter(description = "Filtrar por estado (ex: SP, RJ)")
             @RequestParam(required = false) String estado) {
-        try {
-            List<RegistroVacinacao> resultado = service.filtrar(vacina, estado);
-            return ResponseEntity.ok(resultado);
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
+
+        List<RegistroVacinacao> resultado = service.filtrar(vacina, estado);
+        if (resultado == null || resultado.isEmpty()) {
+            throw new ErrorResponse.ResourceNotFoundException("Não foram encontrados registros para os filtros fornecidos");
         }
+        return ResponseEntity.ok(resultado);
     }
 
     // GET /vacinacao/{id}
@@ -43,13 +44,9 @@ public class RegistroVacinacaoController {
     public ResponseEntity<RegistroVacinacao> buscarPorId(
             @Parameter(description = "ID do registro de vacinação")
             @PathVariable Long id) {
-        try {
-            return service.buscarPorId(id)
-                    .map(ResponseEntity::ok)
-                    .orElse(ResponseEntity.notFound().build());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
-        }
+        return service.buscarPorId(id)
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado"));
     }
 
     // POST /vacinacao
@@ -58,11 +55,7 @@ public class RegistroVacinacaoController {
     public ResponseEntity<RegistroVacinacao> criar(
             @Parameter(description = "Dados do registro de vacinação")
             @RequestBody RegistroVacinacao registro) {
-        try {
-            RegistroVacinacao salvo = service.salvar(registro);
-            return ResponseEntity.status(201).body(salvo);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
-        }
+        RegistroVacinacao salvo = service.salvar(registro);
+        return ResponseEntity.status(201).body(salvo);
     }
 }
