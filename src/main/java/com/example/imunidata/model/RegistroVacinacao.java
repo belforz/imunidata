@@ -1,32 +1,41 @@
 package com.example.imunidata.model;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 
 @Entity
 @Table(name = "registro_vacinacao")
+@Schema(description = "Registro de vacinação com dados de município, estado, vacina aplicada e quantidade")
 public class RegistroVacinacao {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Schema(description = "ID único do registro", example = "1")
     private Long id;
 
     @Column(nullable = false)
+    @Schema(description = "Nome do município", example = "São Paulo")
     private String municipio;
 
     @Column(nullable = false, length = 2)
+    @Schema(description = "Sigla do estado (2 letras)", example = "SP")
     private String estado;
 
     @Column(nullable = false)
+    @Schema(description = "Tipo de vacina aplicada", example = "BCG", allowableValues = {"BCG", "Gripe", "Pentavalente", "Hepatite B", "Febre Amarela"})
     private String vacina;
 
     @Column(nullable = false)
+    @Schema(description = "Dose da vacina", example = "1ª Dose", allowableValues = {"1ª Dose", "2ª Dose", "3ª Dose", "Reforço", "Dose Única"})
     private String dose;
 
     @Column(nullable = false)
+    @Schema(description = "Quantidade de doses aplicadas", example = "15234")
     private Integer quantidadeAplicada;
 
     @Column(nullable = false)
+    @Schema(description = "Data do registro", example = "2024-01-15")
     private LocalDate dataRegistro;
 
     public RegistroVacinacao() {}
@@ -62,4 +71,3 @@ public class RegistroVacinacao {
     public LocalDate getDataRegistro() { return dataRegistro; }
     public void setDataRegistro(LocalDate dataRegistro) { this.dataRegistro = dataRegistro; }
 }
-
