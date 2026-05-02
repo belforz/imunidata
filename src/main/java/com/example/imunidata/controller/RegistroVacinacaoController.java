@@ -3,6 +3,7 @@ package com.example.imunidata.controller;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -88,5 +89,19 @@ public class RegistroVacinacaoController {
             return ResponseEntity.ok(atualizado);
             
         }).orElseThrow(() -> new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado para atualização"));
+    }
+
+    // DELETE /vacinacao/{id}
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Deletar registro", description = "Remove um registro de vacinação específico pelo ID")
+    public ResponseEntity<Void> deletar(
+            @Parameter(description = "ID do registro a ser deletado") 
+            @PathVariable Long id) {
+
+        return service.buscarPorId(id).map(registroExistente -> {
+            service.deletar(id);
+            return ResponseEntity.noContent().<Void>build();
+            
+        }).orElseThrow(() -> new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado para deletar"));
     }
 }
