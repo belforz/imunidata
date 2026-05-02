@@ -1,15 +1,24 @@
 package com.example.imunidata.controller;
 
+import java.util.List;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.example.imunidata.model.ErrorResponse;
 import com.example.imunidata.model.RegistroVacinacao;
 import com.example.imunidata.service.RegistroVacinacaoService;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/vacinacao")
@@ -57,5 +66,27 @@ public class RegistroVacinacaoController {
             @RequestBody RegistroVacinacao registro) {
         RegistroVacinacao salvo = service.salvar(registro);
         return ResponseEntity.status(201).body(salvo);
+    }
+
+    // PUT /vacinacao/{id}
+    @PutMapping("/{id}")
+    @Operation(summary = "Atualizar registro", description = "Atualiza os dados de um registro de vacinação existente pelo ID")
+    public ResponseEntity<RegistroVacinacao> atualizar(
+            @Parameter(description = "ID do registro a ser atualizado") 
+            @PathVariable Long id,
+            @Parameter(description = "Dados atualizados do registro de vacinação") 
+            @RequestBody RegistroVacinacao dadosAtualizados) {
+
+        return service.buscarPorId(id).map(registroExistente -> {
+            registroExistente.setMunicipio(dadosAtualizados.getMunicipio());
+            registroExistente.setEstado(dadosAtualizados.getEstado());
+            registroExistente.setVacina(dadosAtualizados.getVacina());
+            registroExistente.setDose(dadosAtualizados.getDose());
+            registroExistente.setQuantidadeAplicada(dadosAtualizados.getQuantidadeAplicada());
+            
+            RegistroVacinacao atualizado = service.salvar(registroExistente);
+            return ResponseEntity.ok(atualizado);
+            
+        }).orElseThrow(() -> new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado para atualização"));
     }
 }
