@@ -1,18 +1,20 @@
 package com.example.imunidata.service;
 
-import com.example.imunidata.model.ErrorResponse;
-import com.example.imunidata.model.RegistroVacinacao;
-import com.example.imunidata.repository.RegistroVacinacaoRepository;
-import com.opencsv.CSVReader;
-import jakarta.annotation.PostConstruct;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.stereotype.Service;
-
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Service;
+
+import com.example.imunidata.model.ErrorResponse;
+import com.example.imunidata.model.RegistroVacinacao;
+import com.example.imunidata.repository.RegistroVacinacaoRepository;
+import com.opencsv.CSVReader;
+
+import jakarta.annotation.PostConstruct;
 
 @Service
 public class RegistroVacinacaoService {
@@ -80,5 +82,13 @@ public class RegistroVacinacaoService {
                             " e dose " + registro.getDose());
         }
         return repository.save(registro);
+    }
+
+    public void deletar(Long id) {
+        if (!repository.existsById(id)) {
+            throw new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado para deletar");
+        }
+        
+        repository.deleteById(id);
     }
 }
