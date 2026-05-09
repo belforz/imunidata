@@ -22,7 +22,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
-@RequestMapping("/vacinacao")
+@RequestMapping("api/v1/vacinacao")
 @Tag(name = "Vacinação", description = "API para gerenciamento de registros de vacinação")
 public class RegistroVacinacaoController {
 
@@ -32,7 +32,7 @@ public class RegistroVacinacaoController {
         this.service = service;
     }
 
-    // GET /vacinacao  |  GET /vacinacao?vacina=BCG  |  GET /vacinacao?estado=SP
+    // GET api/v1//vacinacao  |  GET api/v1//vacinacao?vacina=BCG  |  GET api/v1/vacinacao?estado=SP
     @GetMapping
     @Operation(summary = "Listar registros de vacinação", description = "Retorna todos os registros ou filtrados por vacina e/ou estado")
     public ResponseEntity<List<RegistroVacinacao>> listar(
@@ -48,7 +48,7 @@ public class RegistroVacinacaoController {
         return ResponseEntity.ok(resultado);
     }
 
-    // GET /vacinacao/{id}
+    // GET api/v1/vacinacao/{id}
     @GetMapping("/{id}")
     @Operation(summary = "Buscar registro por ID", description = "Retorna um registro específico pelo ID")
     public ResponseEntity<RegistroVacinacao> buscarPorId(
@@ -59,7 +59,7 @@ public class RegistroVacinacaoController {
                 .orElseThrow(() -> new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado"));
     }
 
-    // POST /vacinacao
+    // POST api/v1/vacinacao
     @PostMapping
     @Operation(summary = "Criar novo registro", description = "Cria um novo registro de vacinação")
     public ResponseEntity<RegistroVacinacao> criar(
@@ -69,7 +69,7 @@ public class RegistroVacinacaoController {
         return ResponseEntity.status(201).body(salvo);
     }
 
-    // PUT /vacinacao/{id}
+    // PUT api/v1/vacinacao/{id}
     @PutMapping("/{id}")
     @Operation(summary = "Atualizar registro", description = "Atualiza os dados de um registro de vacinação existente pelo ID")
     public ResponseEntity<RegistroVacinacao> atualizar(
@@ -91,7 +91,7 @@ public class RegistroVacinacaoController {
         }).orElseThrow(() -> new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado para atualização"));
     }
 
-    // DELETE /vacinacao/{id}
+    // DELETE api/v1/vacinacao/{id}
     @DeleteMapping("/{id}")
     @Operation(summary = "Deletar registro", description = "Remove um registro de vacinação específico pelo ID")
     public ResponseEntity<Void> deletar(

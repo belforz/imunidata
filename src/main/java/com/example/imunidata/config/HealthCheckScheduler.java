@@ -22,7 +22,7 @@ public class HealthCheckScheduler {
         if (port == null || port.isBlank()) {
             port = env.getProperty("server.port", "8080");
         }
-        String url = "http://localhost:" + port + "/healthz";
+        String url = "http://localhost:" + port + "/api/v1/healthz";
         try {
             String response = restTemplate.getForObject(url, String.class);
             System.out.println("Health check (" + url + "): " + response);
