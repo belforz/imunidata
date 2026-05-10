@@ -35,11 +35,11 @@ public class ExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAlreadyExists(ErrorResponse.ResourceAlreadyExistsException ex) {
         ErrorResponse err = new ErrorResponse(
                 "Vacina já existe",
-                HttpStatus.ALREADY_REPORTED.toString(),
-                ex.getMessage() != null ? ex.getMessage() : "Already Reported",
+                HttpStatus.CONFLICT.toString(),
+                ex.getMessage() != null ? ex.getMessage() : "Already Exits",
                 System.currentTimeMillis()
         );
-        return ResponseEntity.status(HttpStatus.ALREADY_REPORTED).body(err);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(err);
     }
 
     @org.springframework.web.bind.annotation.ExceptionHandler(ErrorResponse.GenericServiceException.class)
