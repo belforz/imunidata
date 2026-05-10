@@ -6,10 +6,13 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Configuration
 @EnableScheduling
 public class HealthCheckScheduler {
+    private static final Logger logger = LoggerFactory.getLogger(HealthCheckScheduler.class);
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -22,12 +25,13 @@ public class HealthCheckScheduler {
         if (port == null || port.isBlank()) {
             port = env.getProperty("server.port", "8080");
         }
+        // use the actual health endpoint path present in the application
         String url = "http://localhost:" + port + "/api/v1/healthz";
         try {
             String response = restTemplate.getForObject(url, String.class);
-            System.out.println("Health check (" + url + "): " + response);
+            logger.info("Health check ({}): {}", url, response);
         } catch (Exception e) {
-            System.err.println("Health check failed (" + url + "): " + e.getMessage());
+            logger.warn("Health check failed ({}): {}", url, e.getMessage());
         }
     }
 }

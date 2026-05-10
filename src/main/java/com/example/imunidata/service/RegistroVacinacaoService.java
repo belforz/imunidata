@@ -3,6 +3,7 @@ package com.example.imunidata.service;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,7 +41,7 @@ public class RegistroVacinacaoService {
                             linha[2].trim(),
                             linha[3].trim(),
                             Integer.parseInt(linha[4].trim()),
-                            LocalDate.parse(linha[5].trim())
+                            LocalDateTime.parse(linha[5].trim())
                     );
                     repository.save(registro);
                 }
