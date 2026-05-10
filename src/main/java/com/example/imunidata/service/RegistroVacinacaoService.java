@@ -2,7 +2,6 @@ package com.example.imunidata.service;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -51,36 +50,35 @@ public class RegistroVacinacaoService {
         }
     }
 
-    public List<RegistroVacinacao> listarTodos() {
-        return repository.findAll();
-    }
-
     public Optional<RegistroVacinacao> buscarPorId(Long id) {
         return repository.findById(id);
     }
 
     public List<RegistroVacinacao> filtrar(String vacina, String estado) {
         if (vacina != null && estado != null) {
-            return repository.findByVacinaIgnoreCaseAndEstadoIgnoreCase(vacina, estado);
+            return repository.findByVacinaAndEstado(vacina, estado);
         }
         if (vacina != null) {
-            return repository.findByVacinaIgnoreCase(vacina);
+            return repository.findByVacina(vacina);
         }
         if (estado != null) {
-            return repository.findByEstadoIgnoreCase(estado);
+            return repository.findByEstado(estado);
         }
         return repository.findAll();
     }
 
     public RegistroVacinacao salvar(RegistroVacinacao registro) {
-        List<RegistroVacinacao> existentes = repository.findByVacinaIgnoreCaseAndEstadoIgnoreCaseAndMunicipioIgnoreCaseAndDoseIgnoreCase(
-                registro.getVacina(), registro.getEstado(), registro.getMunicipio(), registro.getDose());
-        if (!existentes.isEmpty()) {
+        String vacina = registro.getVacina() != null ? registro.getVacina().trim() : null;
+        String estado = registro.getEstado() != null ? registro.getEstado().trim() : null;
+        String municipio = registro.getMunicipio() != null ? registro.getMunicipio().trim() : null;
+        String dose = registro.getDose() != null ? registro.getDose().trim() : null;
+        boolean existe = repository.existsByVacinaAndEstadoAndMunicipioAndDose(vacina, estado, municipio, dose);
+        if (existe) {
             throw new ErrorResponse.ResourceAlreadyExistsException(
-                    "Registro já existe para o município " + registro.getMunicipio() +
-                            ", estado " + registro.getEstado() +
-                            ", vacina " + registro.getVacina() +
-                            " e dose " + registro.getDose());
+                    "Registro já existe para o município " + municipio +
+                            ", estado " + estado +
+                            ", vacina " + vacina +
+                            " e dose " + dose);
         }
         return repository.save(registro);
     }
