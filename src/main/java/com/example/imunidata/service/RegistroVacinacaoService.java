@@ -113,6 +113,20 @@ public class RegistroVacinacaoService {
         return repository.save(registro);
     }
 
+    public RegistroVacinacao atualizar(RegistroVacinacao registro) {
+        List<RegistroVacinacao> existentes = repository
+            .findByVacinaIgnoreCaseAndEstadoIgnoreCaseAndMunicipioIgnoreCaseAndDoseIgnoreCaseAndIdNot(
+                registro.getVacina(), registro.getEstado(),
+                registro.getMunicipio(), registro.getDose(),
+                registro.getId());
+
+        if (!existentes.isEmpty()) {
+            throw new ErrorResponse.ResourceAlreadyExistsException(
+                "Já existe outro registro com essa combinação de município, estado, vacina e dose");
+        }
+        return repository.save(registro);
+    }
+
     public void deletar(Long id) {
         if (!repository.existsById(id)) {
             throw new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado para deletar");
