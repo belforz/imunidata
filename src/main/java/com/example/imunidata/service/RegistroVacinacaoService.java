@@ -1,5 +1,6 @@
 package com.example.imunidata.service;
 
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -12,6 +13,9 @@ import org.springframework.stereotype.Service;
 import com.example.imunidata.model.ErrorResponse;
 import com.example.imunidata.model.RegistroVacinacao;
 import com.example.imunidata.repository.RegistroVacinacaoRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.opencsv.CSVReader;
 
 import jakarta.annotation.PostConstruct;
@@ -47,6 +51,31 @@ public class RegistroVacinacaoService {
             }
         } catch (Exception e) {
             System.err.println("Erro ao carregar CSV: " + e.getMessage());
+        }
+    }
+
+    @PostConstruct
+    public void carregarDadosJSON() {
+        try {
+            ClassPathResource resource = new ClassPathResource("data/vacinacao.json");
+            try (InputStream is = resource.getInputStream()) {
+                ObjectMapper mapper = new ObjectMapper();
+                mapper.registerModule(new JavaTimeModule());
+ 
+                List<RegistroVacinacao> lista = mapper.readValue(is, new TypeReference<List<RegistroVacinacao>>() {});
+ 
+                for (RegistroVacinacao registro : lista) {
+                    List<RegistroVacinacao> existentes =
+                            repository.findByVacinaIgnoreCaseAndEstadoIgnoreCaseAndMunicipioIgnoreCaseAndDoseIgnoreCase(
+                                    registro.getVacina(), registro.getEstado(),
+                                    registro.getMunicipio(), registro.getDose());
+                    if (existentes.isEmpty()) {
+                        repository.save(registro);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Erro ao carregar JSON: " + e.getMessage());
         }
     }
 
