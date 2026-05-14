@@ -84,8 +84,9 @@ public class RegistroVacinacaoController {
             registroExistente.setVacina(dadosAtualizados.getVacina());
             registroExistente.setDose(dadosAtualizados.getDose());
             registroExistente.setQuantidadeAplicada(dadosAtualizados.getQuantidadeAplicada());
-            
-            RegistroVacinacao atualizado = service.salvar(registroExistente);
+            registroExistente.setDataRegistro(dadosAtualizados.getDataRegistro());
+
+            RegistroVacinacao atualizado = service.atualizar(registroExistente);
             return ResponseEntity.ok(atualizado);
             
         }).orElseThrow(() -> new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado para atualização"));
