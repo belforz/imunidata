@@ -10,13 +10,15 @@ import com.example.imunidata.model.RegistroVacinacao;
 @Repository
 public interface RegistroVacinacaoRepository extends JpaRepository<RegistroVacinacao, Long> {
 
-    List<RegistroVacinacao> findByVacinaIgnoreCase(String vacina);
+    List<RegistroVacinacao> findByVacina(String vacina);
 
-    List<RegistroVacinacao> findByEstadoIgnoreCase(String estado);
+    List<RegistroVacinacao> findByEstado(String estado);
 
-    List<RegistroVacinacao> findByVacinaIgnoreCaseAndEstadoIgnoreCase(String vacina, String estado);
+    List<RegistroVacinacao> findByVacinaAndEstado(String vacina, String estado);
 
     List<RegistroVacinacao> findByVacinaIgnoreCaseAndEstadoIgnoreCaseAndMunicipioIgnoreCaseAndDoseIgnoreCase(String vacina, String estado, String municipio, String dose);
 
     List<RegistroVacinacao> findByVacinaIgnoreCaseAndEstadoIgnoreCaseAndMunicipioIgnoreCaseAndDoseIgnoreCaseAndIdNot(String vacina, String estado, String municipio, String dose, Long id);
+
+    boolean existsByVacinaAndEstadoAndMunicipioAndDose(String vacina, String estado, String municipio, String dose);
 }

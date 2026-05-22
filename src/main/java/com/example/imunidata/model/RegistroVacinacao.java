@@ -3,6 +3,7 @@ package com.example.imunidata.model;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "registro_vacinacao")
@@ -36,12 +37,12 @@ public class RegistroVacinacao {
 
     @Column(nullable = false)
     @Schema(description = "Data do registro", example = "2024-01-15")
-    private LocalDate dataRegistro;
+    private LocalDateTime dataRegistro;
 
     public RegistroVacinacao() {}
 
     public RegistroVacinacao(String municipio, String estado, String vacina, String dose,
-                              Integer quantidadeAplicada, LocalDate dataRegistro) {
+                              Integer quantidadeAplicada, LocalDateTime dataRegistro) {
         this.municipio = municipio;
         this.estado = estado;
         this.vacina = vacina;
@@ -68,6 +69,6 @@ public class RegistroVacinacao {
     public Integer getQuantidadeAplicada() { return quantidadeAplicada; }
     public void setQuantidadeAplicada(Integer quantidadeAplicada) { this.quantidadeAplicada = quantidadeAplicada; }
 
-    public LocalDate getDataRegistro() { return dataRegistro; }
-    public void setDataRegistro(LocalDate dataRegistro) { this.dataRegistro = dataRegistro; }
+    public LocalDateTime getDataRegistro() { return dataRegistro; }
+    public void setDataRegistro(LocalDateTime dataRegistro) { this.dataRegistro = dataRegistro; }
 }
