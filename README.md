@@ -150,17 +150,27 @@ src/main/resources/
 
 ## 🔌 Endpoints da API
 
+> Base path: `api/v1/vacinacao`
+
 | Método | Rota | Descrição | Status de retorno |
 |--------|------|-----------|-------------------|
-| GET | `/vacinacao` | Lista todos os registros | 200 |
-| GET | `/vacinacao?vacina=BCG` | Filtra por vacina | 200 |
-| GET | `/vacinacao?estado=SP` | Filtra por estado | 200 |
-| GET | `/vacinacao?vacina=BCG&estado=SP` | Filtra por ambos | 200 |
-| GET | `/vacinacao/{id}` | Busca por ID | 200 / 404 |
-| POST | `/vacinacao` | Cria novo registro | 201 / 409 / 400 |
+| GET | `/api/v1/vacinacao` | Lista todos os registros | 200 / 404 |
+| GET | `/api/v1/vacinacao?vacina=BCG` | Filtra por vacina | 200 / 404 |
+| GET | `/api/v1/vacinacao?estado=SP` | Filtra por estado | 200 / 404 |
+| GET | `/api/v1/vacinacao?vacina=BCG&estado=SP` | Filtra por ambos | 200 / 404 |
+| GET | `/api/v1/vacinacao/{id}` | Busca por ID | 200 / 404 |
+| POST | `/api/v1/vacinacao` | Cria novo registro | 201 / 409 / 400 |
+| PUT | `/api/v1/vacinacao/{id}` | Atualiza registro existente | 200 / 404 |
+| DELETE | `/api/v1/vacinacao/{id}` | Remove registro pelo ID | 204 / 404 |
 | GET | `/healthz` | Health check | 200 |
 
-### Exemplo de resposta — GET `/vacinacao/1`
+---
+
+### GET `/api/v1/vacinacao/1` — buscar por ID
+```bash
+curl http://localhost:8080/api/v1/vacinacao/1
+```
+Resposta `200 OK`:
 ```json
 {
   "id": 1,
@@ -173,25 +183,111 @@ src/main/resources/
 }
 ```
 
-### Exemplo de resposta — erro 404
-```json
-{
-  "message": "Recurso não encontrado",
-  "status": "404 NOT_FOUND",
-  "error": "Registro com ID 999 não encontrado",
-  "timestamp": 1715000000000
-}
-```
+---
 
-### Exemplo de body — POST `/vacinacao`
+### POST `/api/v1/vacinacao` — criar registro
+```bash
+curl -X POST http://localhost:8080/api/v1/vacinacao \
+  -H "Content-Type: application/json" \
+  -d '{
+    "municipio": "Curitiba",
+    "estado": "PR",
+    "vacina": "Gripe",
+    "dose": "1a Dose",
+    "quantidadeAplicada": 5000,
+    "dataRegistro": "2024-06-01T00:00:00"
+  }'
+```
+Resposta `201 Created`:
 ```json
 {
+  "id": 52,
   "municipio": "Curitiba",
   "estado": "PR",
   "vacina": "Gripe",
   "dose": "1a Dose",
   "quantidadeAplicada": 5000,
   "dataRegistro": "2024-06-01T00:00:00"
+}
+```
+
+---
+
+### PUT `/api/v1/vacinacao/{id}` — atualizar registro
+Atualiza **todos** os campos de um registro existente. Retorna 404 se o ID não existir.
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/vacinacao/52 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "municipio": "Curitiba",
+    "estado": "PR",
+    "vacina": "Gripe",
+    "dose": "2a Dose",
+    "quantidadeAplicada": 4800,
+    "dataRegistro": "2024-07-01T00:00:00"
+  }'
+```
+Resposta `200 OK`:
+```json
+{
+  "id": 52,
+  "municipio": "Curitiba",
+  "estado": "PR",
+  "vacina": "Gripe",
+  "dose": "2a Dose",
+  "quantidadeAplicada": 4800,
+  "dataRegistro": "2024-07-01T00:00:00"
+}
+```
+Resposta `404 Not Found` (ID inexistente):
+```json
+{
+  "message": "Recurso não encontrado",
+  "status": "404 NOT_FOUND",
+  "error": "Registro com ID 999 não encontrado para atualização",
+  "timestamp": 1715000000000
+}
+```
+
+---
+
+### DELETE `/api/v1/vacinacao/{id}` — remover registro
+Remove o registro pelo ID. Retorna `204 No Content` em sucesso ou `404` se não existir.
+
+```bash
+curl -X DELETE http://localhost:8080/api/v1/vacinacao/52
+# Resposta: 204 No Content (sem corpo)
+```
+Resposta `404 Not Found` (ID inexistente):
+```json
+{
+  "message": "Recurso não encontrado",
+  "status": "404 NOT_FOUND",
+  "error": "Registro com ID 52 não encontrado para deletar",
+  "timestamp": 1715000000000
+}
+```
+
+---
+
+### Erro 404 genérico (filtros sem resultado)
+```json
+{
+  "message": "Recurso não encontrado",
+  "status": "404 NOT_FOUND",
+  "error": "Não foram encontrados registros para os filtros fornecidos",
+  "timestamp": 1715000000000
+}
+```
+
+### Erro 409 — registro duplicado (POST/PUT)
+```json
+{
+  "message": "Vacina já existe",
+  "status": "409 CONFLICT",
+  "error": "Registro já existe para o município Sao Paulo, estado SP, vacina BCG e dose 1a Dose",
+  "timestamp": 1715000000000
 }
 ```
 
@@ -222,21 +318,29 @@ PORT=10000 ./mvnw spring-boot:run
 ### Testar os endpoints
 ```bash
 # Listar todos os registros
-curl http://localhost:8080/vacinacao
+curl http://localhost:8080/api/v1/vacinacao
 
 # Filtrar por vacina
-curl "http://localhost:8080/vacinacao?vacina=BCG"
+curl "http://localhost:8080/api/v1/vacinacao?vacina=BCG"
 
 # Filtrar por estado
-curl "http://localhost:8080/vacinacao?estado=SP"
+curl "http://localhost:8080/api/v1/vacinacao?estado=SP"
 
 # Buscar por ID
-curl http://localhost:8080/vacinacao/1
+curl http://localhost:8080/api/v1/vacinacao/1
 
-# Criar novo registro
-curl -X POST http://localhost:8080/vacinacao \
+# Criar novo registro (POST → 201)
+curl -X POST http://localhost:8080/api/v1/vacinacao \
   -H "Content-Type: application/json" \
   -d '{"municipio":"Curitiba","estado":"PR","vacina":"Gripe","dose":"1a Dose","quantidadeAplicada":5000,"dataRegistro":"2024-06-01T00:00:00"}'
+
+# Atualizar registro existente (PUT → 200)
+curl -X PUT http://localhost:8080/api/v1/vacinacao/1 \
+  -H "Content-Type: application/json" \
+  -d '{"municipio":"Sao Paulo","estado":"SP","vacina":"BCG","dose":"1a Dose","quantidadeAplicada":16000,"dataRegistro":"2024-01-15T00:00:00"}'
+
+# Deletar registro (DELETE → 204)
+curl -X DELETE http://localhost:8080/api/v1/vacinacao/1
 
 # Health check
 curl http://localhost:8080/healthz
@@ -306,10 +410,11 @@ A aplicação está preparada para deploy em plataformas PaaS gratuitas (Render,
 
 | Código | Significado | Quando ocorre |
 |--------|-------------|---------------|
-| `200 OK` | Sucesso | GETs com resultado |
+| `200 OK` | Sucesso | GETs com resultado, PUT com sucesso |
 | `201 Created` | Criado | POST com sucesso |
+| `204 No Content` | Removido | DELETE com sucesso (sem corpo na resposta) |
 | `400 Bad Request` | Requisição inválida | JSON malformado, campos inválidos |
-| `404 Not Found` | Não encontrado | ID inexistente |
+| `404 Not Found` | Não encontrado | ID inexistente, filtros sem resultado |
 | `409 Conflict` | Conflito/Duplicado | Mesmo município+estado+vacina+dose já cadastrado |
 | `500 Internal Server Error` | Erro interno | Erro inesperado no servidor |
 | `503 Service Unavailable` | Serviço indisponível | Falha em serviço externo |
