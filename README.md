@@ -1,7 +1,7 @@
 # 💉 Imunidata — Sistema de Monitoramento de Vacinação
 
 > Backend REST em Java (Spring Boot) para consulta e gerenciamento de registros de vacinação pública.  
-> Dados iniciais baseados no OpenDataSUS — carregados automaticamente via CSV no startup.
+> Dados baseados no **OpenDataSUS** — carregados automaticamente via CSV no startup e mantidos em cache in-memory.
 
 ---
 
@@ -16,23 +16,21 @@
 
 ## 🏗️ Arquitetura
 
-A aplicação segue a arquitetura em camadas padrão de APIs REST com Spring Boot:
-
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        CLIENTE                              │
 │          (Browser / Postman / Frontend React)               │
 └──────────────────────────┬──────────────────────────────────┘
-                           │  HTTP Request (GET, POST, DELETE)
+                           │  HTTP Request (GET, POST, PUT, DELETE)
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                     CONTROLLER LAYER                        │
-│           RegistroVacinacaoController  /vacinacao           │
-│                 HealthController       /healthz             │
+│        RegistroVacinacaoController  /api/v1/vacinacao       │
+│                HealthController     /healthz                │
 │                                                             │
 │  • Recebe requisições HTTP                                  │
-│  • Valida parâmetros de entrada                             │
-│  • Delega para o Service                                    │
+│  • Valida e repassa parâmetros ao Service                   │
+│  • Aplica paginação in-memory (page + limit)                │
 │  • Retorna ResponseEntity com status HTTP adequado          │
 └──────────────────────────┬──────────────────────────────────┘
                            │  Chamada de método Java
@@ -41,25 +39,27 @@ A aplicação segue a arquitetura em camadas padrão de APIs REST com Spring Boo
 │                      SERVICE LAYER                          │
 │               RegistroVacinacaoService                      │
 │                                                             │
-│  • Contém as regras de negócio                              │
-│  • Carrega dados do CSV no startup (@PostConstruct)         │
-│  • Verifica duplicados antes de salvar (existsBy...)        │
-│  • Lança exceções customizadas (ResourceNotFoundException,  │
-│    ResourceAlreadyExistsException, etc.)                    │
+│  • Regras de negócio                                        │
+│  • Cache in-memory: List<> + ConcurrentHashMap<id, obj>    │
+│  • Carrega CSV no startup (@PostConstruct)                  │
+│  • Aceita upload de novo CSV via método dedicado            │
+│  • Filtros via streams (sem query ao banco)                 │
+│  • Busca por ID em O(1) via Map                             │
+│  • Verifica duplicatas por co_documento                     │
+│  • Lança exceções customizadas                              │
 └──────────────────────────┬──────────────────────────────────┘
-                           │  Chamada ao repositório JPA
+                           │  Persiste/lê apenas no startup e CRUD
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    REPOSITORY LAYER                         │
 │            RegistroVacinacaoRepository                      │
-│            (extends JpaRepository<T, ID>)                   │
+│            (extends JpaRepository<T, Long>)                 │
 │                                                             │
 │  • Interface gerenciada pelo Spring Data JPA                │
-│  • Gera queries automaticamente pelo nome do método         │
-│    ex.: findByVacina(), findByEstado(),                     │
-│         existsByVacinaAndEstadoAndMunicipioAndDose()        │
+│  • Usada para persistência (save/delete)                    │
+│  • Leituras são feitas via cache, não direto ao banco       │
 └──────────────────────────┬──────────────────────────────────┘
-                           │  SQL gerado automaticamente (JPQL/HQL)
+                           │  SQL gerado automaticamente
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                       BANCO DE DADOS                        │
@@ -67,7 +67,7 @@ A aplicação segue a arquitetura em camadas padrão de APIs REST com Spring Boo
 │                   Tabela: registro_vacinacao                │
 │                                                             │
 │  • Banco relacional em memória (recriado a cada startup)    │
-│  • Populado automaticamente pelo CSV no boot                │
+│  • Populado automaticamente via CSV no boot                 │
 │  • Acessível via H2 Console em /h2-console                  │
 └─────────────────────────────────────────────────────────────┘
 
@@ -107,44 +107,55 @@ A aplicação segue a arquitetura em camadas padrão de APIs REST com Spring Boo
 
 ```
 src/main/java/com/example/imunidata/
-├── ImunidataApplication.java          # Ponto de entrada Spring Boot
+├── ImunidataApplication.java              # Ponto de entrada Spring Boot
 ├── config/
-│   ├── CorsConfig.java                # Configuração de CORS (permite frontend)
-│   ├── HealthCheckScheduler.java      # Agendador que pinga /healthz a cada 60s
-│   ├── OpenApiConfig.java             # Configuração do Swagger/OpenAPI
-│   └── RequestLoggingFilter.java      # Filtro de log de requisições HTTP
+│   ├── CorsConfig.java                    # Configuração de CORS
+│   ├── HealthCheckScheduler.java          # Pinga /healthz a cada 60s
+│   ├── OpenApiConfig.java                 # Configuração Swagger/OpenAPI
+│   └── RequestLoggingFilter.java          # Log de todas as requisições HTTP
 ├── controller/
-│   ├── RegistroVacinacaoController.java  # CRUD /vacinacao
-│   └── HealthController.java             # GET /healthz
+│   ├── RegistroVacinacaoController.java   # CRUD + upload /api/v1/vacinacao
+│   └── HealthController.java              # GET /healthz
 ├── model/
-│   ├── RegistroVacinacao.java         # Entidade JPA (tabela registro_vacinacao)
-│   └── ErrorResponse.java             # DTO de erro + exceções customizadas
+│   ├── RegistroVacinacao.java             # Entidade JPA (OpenDataSUS)
+│   └── ErrorResponse.java                 # DTO de erro + exceções customizadas
 ├── repository/
-│   └── RegistroVacinacaoRepository.java  # Interface JpaRepository com filtros
+│   └── RegistroVacinacaoRepository.java   # Interface JpaRepository (persistência)
 ├── service/
-│   └── RegistroVacinacaoService.java  # Regras de negócio + carga CSV
+│   └── RegistroVacinacaoService.java      # Regras de negócio + cache in-memory
 └── utils/
-    └── ExceptionHandler.java          # @ControllerAdvice global de erros
+    └── ExceptionHandler.java              # @ControllerAdvice global
 
 src/main/resources/
-├── application.properties             # Configurações de banco, porta, logging
+├── application.properties                 # Configurações gerais
 └── data/
-    └── vacinacao.csv                  # Dados reais de vacinação (OpenDataSUS)
+    └── vacinacao.csv                      # Dados OpenDataSUS (carregados no boot)
 ```
 
 ---
 
-## 🗃️ Entidade Principal — `RegistroVacinacao`
+## 🗃️ Entidade Principal — `RegistroVacinacao` (OpenDataSUS)
 
-| Campo | Tipo | Descrição | Exemplo |
-|-------|------|-----------|---------|
-| `id` | Long | Identificador único (auto) | `1` |
-| `municipio` | String | Nome do município | `"Sao Paulo"` |
-| `estado` | String (2) | Sigla UF | `"SP"` |
-| `vacina` | String | Tipo da vacina | `"BCG"`, `"Gripe"` |
-| `dose` | String | Número/tipo da dose | `"1a Dose"`, `"Reforco"` |
-| `quantidadeAplicada` | Integer | Doses aplicadas | `15234` |
-| `dataRegistro` | LocalDateTime | Data do registro | `"2024-01-15T00:00:00"` |
+| Campo | Tipo | Coluna CSV | Descrição | Exemplo |
+|-------|------|------------|-----------|---------|
+| `id` | Long | — | Índice sequencial (gerado automaticamente) | `1` |
+| `coDocumento` | String | `co_documento` | ID único do documento | `"c8a9789c-..."` |
+| `coPaciente` | String | `co_paciente` | Hash anonimizado do paciente | `"3ebb002b..."` |
+| `sexo` | String | `tp_sexo_paciente` | Sexo do paciente | `"M"`, `"F"` |
+| `racaCor` | String | `no_raca_cor_paciente` | Raça/cor | `"BRANCA"` |
+| `municipio` | String | `no_municipio_paciente` | Município | `"SAO PAULO"` |
+| `estado` | String (2) | `sg_uf_paciente` | UF | `"SP"` |
+| `idade` | Integer | `nu_idade_paciente` | Idade | `13` |
+| `estabelecimento` | String | `no_fantasia_estabelecimento` | Nome da UBS/hospital | `"UBS VILA TEREZINHA"` |
+| `vacina` | String | `ds_vacina` | Nome da vacina | `"Vacina dengue (atenuada)"` |
+| `dataVacina` | LocalDate | `dt_vacina` | Data da vacinação | `"2026-01-01"` |
+| `dose` | String | `ds_dose_vacina` | Dose aplicada | `"1ª Dose"` |
+| `localAplicacao` | String | `ds_local_aplicacao` | Local no corpo | `"Deltoides do Braco Esquerdo"` |
+| `viaAdministracao` | String | `ds_via_administracao` | Via de aplicação | `"Intramuscular"` |
+| `loteVacina` | String | `co_lote_vacina` | Código do lote | `"561413"` |
+| `fabricante` | String | `ds_vacina_fabricante` | Fabricante | `"IDT BIOLOGIKA GMBH"` |
+| `estrategia` | String | `ds_estrategia_vacinacao` | Estratégia | `"Rotina"`, `"Campanha"` |
+| `origemRegistro` | String | `ds_origem_registro` | Origem do registro | `"Transcricao de caderneta"` |
 
 ---
 
@@ -152,194 +163,102 @@ src/main/resources/
 
 > Base path: `api/v1/vacinacao`
 
-| Método | Rota | Descrição | Status de retorno |
-|--------|------|-----------|-------------------|
-| GET | `/api/v1/vacinacao` | Lista todos os registros | 200 / 404 |
-| GET | `/api/v1/vacinacao?vacina=BCG` | Filtra por vacina | 200 / 404 |
-| GET | `/api/v1/vacinacao?estado=SP` | Filtra por estado | 200 / 404 |
-| GET | `/api/v1/vacinacao?vacina=BCG&estado=SP` | Filtra por ambos | 200 / 404 |
-| GET | `/api/v1/vacinacao/{id}` | Busca por ID | 200 / 404 |
-| POST | `/api/v1/vacinacao` | Cria novo registro | 201 / 409 / 400 |
+| Método | Rota | Descrição | Status |
+|--------|------|-----------|--------|
+| GET | `/api/v1/vacinacao` | Lista registros (todos os filtros + paginação) | 200 / 404 |
+| GET | `/api/v1/vacinacao/{id}` | Busca por índice ID (O(1) via cache) | 200 / 404 |
+| POST | `/api/v1/vacinacao` | Cria novo registro | 201 / 409 |
+| POST | `/api/v1/vacinacao/upload` | Upload de arquivo CSV OpenDataSUS | 200 / 500 |
 | PUT | `/api/v1/vacinacao/{id}` | Atualiza registro existente | 200 / 404 |
 | DELETE | `/api/v1/vacinacao/{id}` | Remove registro pelo ID | 204 / 404 |
 | GET | `/healthz` | Health check | 200 |
 
 ---
 
-### GET `/api/v1/vacinacao/1` — buscar por ID
-```bash
-curl http://localhost:8080/api/v1/vacinacao/1
-```
-Resposta `200 OK`:
-```json
-{
-  "id": 1,
-  "municipio": "Sao Paulo",
-  "estado": "SP",
-  "vacina": "BCG",
-  "dose": "1a Dose",
-  "quantidadeAplicada": 15234,
-  "dataRegistro": "2024-01-15T00:00:00"
-}
-```
+### Parâmetros de filtro — GET `/api/v1/vacinacao`
 
----
+Todos os parâmetros são opcionais e combináveis:
 
-### POST `/api/v1/vacinacao` — criar registro
-```bash
-curl -X POST http://localhost:8080/api/v1/vacinacao \
-  -H "Content-Type: application/json" \
-  -d '{
-    "municipio": "Curitiba",
-    "estado": "PR",
-    "vacina": "Gripe",
-    "dose": "1a Dose",
-    "quantidadeAplicada": 5000,
-    "dataRegistro": "2024-06-01T00:00:00"
-  }'
-```
-Resposta `201 Created`:
-```json
-{
-  "id": 52,
-  "municipio": "Curitiba",
-  "estado": "PR",
-  "vacina": "Gripe",
-  "dose": "1a Dose",
-  "quantidadeAplicada": 5000,
-  "dataRegistro": "2024-06-01T00:00:00"
-}
-```
-
----
-
-### PUT `/api/v1/vacinacao/{id}` — atualizar registro
-Atualiza **todos** os campos de um registro existente. Retorna 404 se o ID não existir.
-
-```bash
-curl -X PUT http://localhost:8080/api/v1/vacinacao/52 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "municipio": "Curitiba",
-    "estado": "PR",
-    "vacina": "Gripe",
-    "dose": "2a Dose",
-    "quantidadeAplicada": 4800,
-    "dataRegistro": "2024-07-01T00:00:00"
-  }'
-```
-Resposta `200 OK`:
-```json
-{
-  "id": 52,
-  "municipio": "Curitiba",
-  "estado": "PR",
-  "vacina": "Gripe",
-  "dose": "2a Dose",
-  "quantidadeAplicada": 4800,
-  "dataRegistro": "2024-07-01T00:00:00"
-}
-```
-Resposta `404 Not Found` (ID inexistente):
-```json
-{
-  "message": "Recurso não encontrado",
-  "status": "404 NOT_FOUND",
-  "error": "Registro com ID 999 não encontrado para atualização",
-  "timestamp": 1715000000000
-}
-```
-
----
-
-### DELETE `/api/v1/vacinacao/{id}` — remover registro
-Remove o registro pelo ID. Retorna `204 No Content` em sucesso ou `404` se não existir.
-
-```bash
-curl -X DELETE http://localhost:8080/api/v1/vacinacao/52
-# Resposta: 204 No Content (sem corpo)
-```
-Resposta `404 Not Found` (ID inexistente):
-```json
-{
-  "message": "Recurso não encontrado",
-  "status": "404 NOT_FOUND",
-  "error": "Registro com ID 52 não encontrado para deletar",
-  "timestamp": 1715000000000
-}
-```
-
----
-
-### Erro 404 genérico (filtros sem resultado)
-```json
-{
-  "message": "Recurso não encontrado",
-  "status": "404 NOT_FOUND",
-  "error": "Não foram encontrados registros para os filtros fornecidos",
-  "timestamp": 1715000000000
-}
-```
-
-### Erro 409 — registro duplicado (POST/PUT)
-```json
-{
-  "message": "Vacina já existe",
-  "status": "409 CONFLICT",
-  "error": "Registro já existe para o município Sao Paulo, estado SP, vacina BCG e dose 1a Dose",
-  "timestamp": 1715000000000
-}
-```
+| Parâmetro | Tipo | Exemplo |
+|-----------|------|---------|
+| `vacina` | String | `Vacina dengue (atenuada)` |
+| `estado` | String | `SP` |
+| `municipio` | String | `SAO PAULO` |
+| `coDocumento` | String | `c8a9789c-...` |
+| `coPaciente` | String | `3ebb002b...` |
+| `sexo` | String | `M` |
+| `racaCor` | String | `BRANCA` |
+| `idade` | Integer | `13` |
+| `estabelecimento` | String | `UBS VILA TEREZINHA` |
+| `dataVacina` | LocalDate | `2026-01-01` |
+| `dose` | String | `1ª Dose` |
+| `localAplicacao` | String | `Deltoides do Braco Esquerdo` |
+| `viaAdministracao` | String | `Intramuscular` |
+| `loteVacina` | String | `561413` |
+| `fabricante` | String | `FIOCRUZ` |
+| `estrategia` | String | `Rotina` |
+| `origemRegistro` | String | `Transcricao de caderneta` |
+| `page` | Integer | `0` (padrão: `0`) |
+| `limit` | Integer | `20` (padrão: `20`, máximo: `100`) |
 
 ---
 
 ## 🚀 Como executar localmente
 
-### Pré-requisitos
-- Java 21+
-- Maven (ou use o wrapper `./mvnw` incluído)
-
-### Build e execução
 ```bash
-# Clonar o repositório
-git clone <url-do-repositorio>
-cd imunidata
-
 # Compilar
 ./mvnw clean package
 
 # Executar (porta padrão 8080)
 ./mvnw spring-boot:run
 
-# Executar em porta específica (simula ambiente PaaS como Render)
+# Executar simulando ambiente PaaS (ex: Render)
 PORT=10000 ./mvnw spring-boot:run
 ```
 
-### Testar os endpoints
+### Exemplos de chamadas
+
 ```bash
-# Listar todos os registros
-curl http://localhost:8080/api/v1/vacinacao
+# Listar todos (page=0, limit=20)
+curl "http://localhost:8080/api/v1/vacinacao"
 
-# Filtrar por vacina
-curl "http://localhost:8080/api/v1/vacinacao?vacina=BCG"
+# Paginação
+curl "http://localhost:8080/api/v1/vacinacao?page=0&limit=5"
 
-# Filtrar por estado
-curl "http://localhost:8080/api/v1/vacinacao?estado=SP"
+# Filtrar por estado + vacina
+curl "http://localhost:8080/api/v1/vacinacao?estado=SP&vacina=BCG"
 
-# Buscar por ID
-curl http://localhost:8080/api/v1/vacinacao/1
+# Filtrar por estratégia
+curl "http://localhost:8080/api/v1/vacinacao?estrategia=Campanha"
+
+# Buscar por ID (O(1))
+curl "http://localhost:8080/api/v1/vacinacao/1"
 
 # Criar novo registro (POST → 201)
 curl -X POST http://localhost:8080/api/v1/vacinacao \
   -H "Content-Type: application/json" \
-  -d '{"municipio":"Curitiba","estado":"PR","vacina":"Gripe","dose":"1a Dose","quantidadeAplicada":5000,"dataRegistro":"2024-06-01T00:00:00"}'
+  -d '{
+    "municipio": "SAO PAULO",
+    "estado": "SP",
+    "vacina": "Vacina dengue (atenuada)",
+    "dataVacina": "2026-02-01",
+    "dose": "1ª Dose",
+    "estabelecimento": "UBS CENTRO",
+    "fabricante": "IDT BIOLOGIKA GMBH",
+    "estrategia": "Rotina",
+    "origemRegistro": "Sistema de informacao"
+  }'
 
-# Atualizar registro existente (PUT → 200)
+# Upload de CSV OpenDataSUS (POST → 200)
+curl -X POST http://localhost:8080/api/v1/vacinacao/upload \
+  -F "file=@/caminho/para/vacinacao.csv"
+
+# Atualizar (PUT → 200)
 curl -X PUT http://localhost:8080/api/v1/vacinacao/1 \
   -H "Content-Type: application/json" \
-  -d '{"municipio":"Sao Paulo","estado":"SP","vacina":"BCG","dose":"1a Dose","quantidadeAplicada":16000,"dataRegistro":"2024-01-15T00:00:00"}'
+  -d '{"municipio":"SAO PAULO","estado":"SP","vacina":"BCG","dose":"2ª Dose","dataVacina":"2026-03-01"}'
 
-# Deletar registro (DELETE → 204)
+# Deletar (DELETE → 204)
 curl -X DELETE http://localhost:8080/api/v1/vacinacao/1
 
 # Health check
@@ -348,9 +267,30 @@ curl http://localhost:8080/healthz
 
 ---
 
-## 📊 Swagger UI (documentação interativa)
+## 📤 Upload de CSV
 
-Com a aplicação rodando, acesse:
+O endpoint `POST /api/v1/vacinacao/upload` aceita arquivos CSV no formato OpenDataSUS:
+
+- Tenta leitura em **UTF-8** e depois **ISO-8859-1** automaticamente
+- Pula linhas inválidas (< 17 colunas) sem abortar
+- Ignora duplicatas por `co_documento` (não sobrescreve)
+- Retorna quantos registros foram inseridos
+
+```bash
+curl -X POST http://localhost:8080/api/v1/vacinacao/upload \
+  -F "file=@vacinacao.csv"
+```
+Resposta `200 OK`:
+```json
+{
+  "mensagem": "CSV carregado com sucesso",
+  "registrosInseridos": 20
+}
+```
+
+---
+
+## 📊 Swagger UI
 
 | Interface | URL |
 |-----------|-----|
@@ -359,32 +299,36 @@ Com a aplicação rodando, acesse:
 
 ---
 
-## 🗄️ H2 Console (visualizar banco de dados)
+## 🗄️ H2 Console
 
-> ⚠️ Disponível apenas enquanto a JVM estiver rodando (banco em memória).
+> ⚠️ Disponível apenas enquanto a JVM estiver rodando.
 
 1. Acesse: http://localhost:8080/h2-console
-2. Preencha exatamente assim:
-   - **Driver Class:** `org.h2.Driver`
+2. Preencha:
    - **JDBC URL:** `jdbc:h2:mem:vacinacaodb;DB_CLOSE_DELAY=-1`
    - **User Name:** `sa`
    - **Password:** *(em branco)*
-3. Clique em **Connect**
 
-Queries úteis:
 ```sql
--- Ver todos os registros
 SELECT * FROM registro_vacinacao;
-
--- Contar total
 SELECT COUNT(*) FROM registro_vacinacao;
-
--- Filtrar por vacina
-SELECT * FROM registro_vacinacao WHERE vacina = 'BCG';
-
--- Filtrar por estado
 SELECT * FROM registro_vacinacao WHERE estado = 'SP';
+SELECT vacina, COUNT(*) FROM registro_vacinacao GROUP BY vacina;
 ```
+
+---
+
+## 📋 Códigos HTTP
+
+| Código | Quando ocorre |
+|--------|---------------|
+| `200 OK` | GET com resultado, PUT, upload de CSV |
+| `201 Created` | POST criou registro |
+| `204 No Content` | DELETE com sucesso |
+| `404 Not Found` | ID inexistente, filtros sem resultado |
+| `409 Conflict` | `co_documento` duplicado |
+| `500 Internal Server Error` | Erro inesperado, CSV inválido |
+| `503 Service Unavailable` | Falha em serviço externo |
 
 ---
 
@@ -392,32 +336,29 @@ SELECT * FROM registro_vacinacao WHERE estado = 'SP';
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `PORT` | `8080` | Porta em que a aplicação sobe (definida automaticamente em PaaS como Render) |
+| `PORT` | `8080` | Porta da aplicação (Render define automaticamente) |
 
 ---
 
 ## 🌐 Deploy (Render / PaaS)
 
-A aplicação está preparada para deploy em plataformas PaaS gratuitas (Render, Railway, etc.):
-
-- A porta é lida automaticamente via `server.port=${PORT:8080}`
-- Um agendador interno (`HealthCheckScheduler`) chama `/healthz` a cada 60 segundos para evitar hibernação
-- Configure o health check da plataforma apontando para `/healthz`
+- Porta lida via `server.port=${PORT:8080}`
+- `HealthCheckScheduler` pinga `/healthz` a cada 60s para evitar hibernação
+- Configure health check da plataforma: path `/healthz`, protocolo HTTP
 
 ---
 
-## 📋 Códigos HTTP retornados
+## 🛠️ Tecnologias
 
-| Código | Significado | Quando ocorre |
-|--------|-------------|---------------|
-| `200 OK` | Sucesso | GETs com resultado, PUT com sucesso |
-| `201 Created` | Criado | POST com sucesso |
-| `204 No Content` | Removido | DELETE com sucesso (sem corpo na resposta) |
-| `400 Bad Request` | Requisição inválida | JSON malformado, campos inválidos |
-| `404 Not Found` | Não encontrado | ID inexistente, filtros sem resultado |
-| `409 Conflict` | Conflito/Duplicado | Mesmo município+estado+vacina+dose já cadastrado |
-| `500 Internal Server Error` | Erro interno | Erro inesperado no servidor |
-| `503 Service Unavailable` | Serviço indisponível | Falha em serviço externo |
+| Tecnologia | Versão | Motivo |
+|------------|--------|--------|
+| Java | 21 | LTS estável |
+| Spring Boot | 3.3.5 | Framework padrão REST |
+| Spring Data JPA | — | Persistência sem SQL manual |
+| H2 Database | — | In-memory, zero configuração |
+| OpenCSV | 5.9 | Leitura de CSV com suporte a encoding |
+| Springdoc OpenAPI | — | Swagger automático via anotações |
+| ConcurrentHashMap | — | Cache in-memory thread-safe para O(1) lookup |
 
 ---
 
@@ -425,21 +366,7 @@ A aplicação está preparada para deploy em plataformas PaaS gratuitas (Render,
 
 | Documento | Descrição |
 |-----------|-----------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Decisões arquiteturais detalhadas e justificativas |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Decisões arquiteturais e justificativas |
 | [API_REFERENCE.md](docs/API_REFERENCE.md) | Referência completa dos endpoints |
-| [ERROR_HANDLING.md](docs/ERROR_HANDLING.md) | Formato de erros e exceções customizadas |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Instruções de deploy local e em produção |
-
----
-
-## 🛠️ Tecnologias utilizadas
-
-| Tecnologia | Versão | Motivo da escolha |
-|------------|--------|-------------------|
-| Java | 21 | LTS estável, suporte a records e pattern matching |
-| Spring Boot | 3.3.5 | Framework padrão para APIs REST em Java |
-| Spring Data JPA | — | Abstração de repositório sem SQL manual |
-| H2 Database | — | Banco em memória, zero configuração, ideal para protótipo |
-| OpenCSV | 5.9 | Leitura robusta de CSV com suporte a encoding UTF-8 |
-| Springdoc OpenAPI | — | Gera Swagger UI automaticamente a partir das anotações |
-| Maven | — | Gerenciamento de dependências e build |
+| [ERROR_HANDLING.md](docs/ERROR_HANDLING.md) | Formato de erros e exceções |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deploy local e produção |

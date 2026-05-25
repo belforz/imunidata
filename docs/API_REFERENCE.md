@@ -1,92 +1,192 @@
 # Referência da API — Imunidata
 
-Base URL (local): http://localhost:{PORT}
+Base URL (local): `http://localhost:{PORT}/api/v1`  
+Base URL (produção): `https://imunidata.onrender.com/api/v1`
 
-Endpoints principais
+---
 
-1) GET /vacinacao
+## Endpoints
 
-- Descrição: Lista todos os registros de vacinação ou filtra por `vacina` e/ou `estado` quando parâmetros são fornecidos.
-- Query params:
-  - `vacina` (opcional) — ex.: `BCG`, `Gripe`
-  - `estado` (opcional) — sigla do estado ex.: `SP`, `RJ`
-- Respostas:
-  - 200 OK — array JSON de registros (pode estar vazio se nenhuma correspondência).
-  - 500 Internal Server Error — em caso de erro inesperado.
+### 1) GET `/api/v1/vacinacao`
 
-Exemplo de resposta (200):
+Lista registros com filtros opcionais + paginação in-memory.
 
+**Query params (todos opcionais):**
+
+| Parâmetro | Descrição | Exemplo |
+|-----------|-----------|---------|
+| `vacina` | Nome da vacina | `Vacina dengue (atenuada)` |
+| `estado` | Sigla UF | `SP` |
+| `municipio` | Município | `SAO PAULO` |
+| `coDocumento` | ID do documento | `c8a9789c-...` |
+| `coPaciente` | Hash do paciente | `3ebb002b...` |
+| `sexo` | Sexo | `M`, `F` |
+| `racaCor` | Raça/cor | `BRANCA` |
+| `idade` | Idade | `13` |
+| `estabelecimento` | UBS/hospital | `UBS VILA TEREZINHA` |
+| `dataVacina` | Data | `2026-01-01` |
+| `dose` | Dose | `1ª Dose` |
+| `localAplicacao` | Local no corpo | `Deltoides do Braco Esquerdo` |
+| `viaAdministracao` | Via | `Intramuscular` |
+| `loteVacina` | Lote | `561413` |
+| `fabricante` | Fabricante | `FIOCRUZ` |
+| `estrategia` | Estratégia | `Rotina`, `Campanha` |
+| `origemRegistro` | Origem | `Transcricao de caderneta` |
+| `page` | Página (padrão: `0`) | `0` |
+| `limit` | Itens por página (padrão: `20`, máx: `100`) | `10` |
+
+**Respostas:**
+- `200 OK` — array paginado de registros
+- `404 Not Found` — nenhum resultado para os filtros
+
+Exemplo `200`:
 ```json
 [
   {
     "id": 1,
-    "municipio": "Sao Paulo",
+    "coDocumento": "c8a9789c-a4d7-4851-a698-bd39895f922c-i0b0",
+    "coPaciente": "3ebb002b287e37b4e3713b9cc3bac86438e3ad0b",
+    "sexo": "M",
+    "racaCor": "BRANCA",
+    "municipio": "SAO PAULO",
     "estado": "SP",
-    "vacina": "BCG",
-    "dose": "1a Dose",
-    "quantidadeAplicada": 15234,
-    "dataRegistro": "2024-01-15T00:00:00"
+    "idade": 13,
+    "estabelecimento": "UBS VILA TEREZINHA",
+    "vacina": "Vacina dengue (atenuada)",
+    "dataVacina": "2026-01-01",
+    "dose": "1ª Dose",
+    "localAplicacao": "Face Externa Inferior do Braco Esquerdo",
+    "viaAdministracao": "Subcutanea",
+    "loteVacina": "561413",
+    "fabricante": "IDT BIOLOGIKA GMBH",
+    "estrategia": "Rotina",
+    "origemRegistro": "Transcricao de caderneta"
   }
 ]
 ```
 
-2) GET /vacinacao/{id}
+---
 
-- Descrição: Retorna um registro por ID.
-- Path param: `id` (Long)
-- Respostas:
-  - 200 OK — objeto JSON do registro.
-  - 404 Not Found — não existe registro com esse ID.
-  - 500 Internal Server Error — erro inesperado.
+### 2) GET `/api/v1/vacinacao/{id}`
 
-Exemplo de resposta (404):
+Busca um registro pelo índice sequencial. Resolução O(1) via `ConcurrentHashMap`.
 
+**Respostas:**
+- `200 OK` — objeto do registro
+- `404 Not Found` — ID não existe
+
+Exemplo `404`:
 ```json
 {
-  "message": "Registro com ID 999 não encontrado",
+  "message": "Recurso não encontrado",
   "status": "404 NOT_FOUND",
-  "error": "Not Found",
-  "timestamp": 1670000000000
+  "error": "Registro com ID 999 não encontrado",
+  "timestamp": 1748000000000
 }
 ```
 
-3) POST /vacinacao
+---
 
-- Descrição: Cria um novo registro de vacinação.
-- Body (JSON):
+### 3) POST `/api/v1/vacinacao`
+
+Cria um novo registro. Verifica duplicata por `coDocumento`.
+
+**Body (JSON):**
+```json
+{
+  "municipio": "SAO PAULO",
+  "estado": "SP",
+  "vacina": "Vacina dengue (atenuada)",
+  "dataVacina": "2026-02-01",
+  "dose": "1ª Dose",
+  "estabelecimento": "UBS CENTRO",
+  "fabricante": "IDT BIOLOGIKA GMBH",
+  "estrategia": "Rotina",
+  "origemRegistro": "Sistema de informacao"
+}
+```
+
+**Respostas:**
+- `201 Created` — retorna objeto criado com `id` gerado
+- `409 Conflict` — `coDocumento` já existe
+
+---
+
+### 4) POST `/api/v1/vacinacao/upload`
+
+Faz upload de arquivo CSV no formato OpenDataSUS.
+
+- Detecta encoding automaticamente (UTF-8 → ISO-8859-1)
+- Pula linhas inválidas sem abortar
+- Ignora duplicatas por `coDocumento`
+- Tamanho máximo: 50MB
+
+```bash
+curl -X POST http://localhost:8080/api/v1/vacinacao/upload \
+  -F "file=@vacinacao.csv"
+```
+
+**Respostas:**
+- `200 OK` — retorna quantidade de registros inseridos
+- `500 Internal Server Error` — arquivo não é CSV ou falha de leitura
+
+Exemplo `200`:
+```json
+{
+  "mensagem": "CSV carregado com sucesso",
+  "registrosInseridos": 20
+}
+```
+
+---
+
+### 5) PUT `/api/v1/vacinacao/{id}`
+
+Atualiza os campos de um registro existente.
+
+**Respostas:**
+- `200 OK` — objeto atualizado
+- `404 Not Found` — ID não existe
+
+---
+
+### 6) DELETE `/api/v1/vacinacao/{id}`
+
+Remove o registro do banco e do cache in-memory.
+
+**Respostas:**
+- `204 No Content` — removido com sucesso
+- `404 Not Found` — ID não existe
+
+---
+
+### 7) GET `/healthz`
+
+Health check de liveness. Também chamado internamente a cada 60s pelo `HealthCheckScheduler`.
+
+**Resposta:** `200 OK` com corpo `OK`
+
+---
+
+## Formato padrão de erro
 
 ```json
 {
-  "municipio": "Sao Paulo",
-  "estado": "SP",
-  "vacina": "Gripe",
-  "dose": "1a Dose",
-  "quantidadeAplicada": 1000,
-  "dataRegistro": "2024-03-01T00:00:00"
+  "message": "descrição legível",
+  "status": "404 NOT_FOUND",
+  "error": "mensagem detalhada da exceção",
+  "timestamp": 1748000000000
 }
 ```
 
-- Respostas:
-  - 201 Created — retorna o objeto criado com o `id` gerado.
-  - 409 Conflict — registro já existe (quando município+estado+vacina+dose já existem).
-  - 400 Bad Request — payload inválido.
-  - 500 Internal Server Error — erro inesperado.
+## Códigos HTTP resumidos
 
-4) GET /healthz
-
-- Descrição: Endpoint simples de health (liveness). Retorna 200 OK com corpo `OK`.
-
-Status codes resumidos
-
-- 200 OK — requisição bem-sucedida (GETs).
-- 201 Created — recurso criado (POST).
-- 400 Bad Request — JSON inválido, validação falhou.
-- 404 Not Found — recurso não encontrado.
-- 409 Conflict — tentativa de criar recurso duplicado.
-- 500 Internal Server Error — erro interno não tratado.
-
-Notas
-
-- Campos de data usam ISO LocalDateTime (ex.: `2024-01-15T00:00:00`).
-- Para integrações, documente os possíveis erros no Swagger/OpenAPI. A aplicação expõe OpenAPI JSON em `/api/v1/api-docs` conforme `application.properties`.
-
+| Código | Quando |
+|--------|--------|
+| `200` | GET/PUT com sucesso, upload CSV |
+| `201` | POST criou registro |
+| `204` | DELETE com sucesso |
+| `404` | ID inexistente, filtros sem resultado |
+| `409` | `coDocumento` duplicado |
+| `500` | Erro inesperado, CSV inválido |
+| `503` | Serviço externo indisponível |
