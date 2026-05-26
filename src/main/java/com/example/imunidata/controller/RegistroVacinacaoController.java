@@ -115,7 +115,7 @@ public class RegistroVacinacaoController {
             int inseridos = service.carregarDadosCSVArquivo(temp);
             temp.delete();
             return ResponseEntity.ok(Map.of(
-                    "mensagem", "CSV carregado com sucesso",
+                    "mensagem", inseridos > 0 ? "CSV carregado com sucesso" : "CSV processado, mas nenhum registro novo foi inserido (verifique duplicatas ou erros no log)",
                     "registrosInseridos", inseridos
             ));
         } catch (ErrorResponse.ResourceAlreadyExistsException | ErrorResponse.GenericServiceException ex) {

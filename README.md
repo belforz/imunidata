@@ -1,11 +1,11 @@
-# 💉 Imunidata — Sistema de Monitoramento de Vacinação
+#  Imunidata — Sistema de Monitoramento de Vacinação
 
 > Backend REST em Java (Spring Boot) para consulta e gerenciamento de registros de vacinação pública.  
 > Dados baseados no **OpenDataSUS** — carregados automaticamente via CSV no startup e mantidos em cache in-memory.
 
 ---
 
-## 👥 Autores
+##  Autores
 
 | Nome | Papel |
 |------|-------|
@@ -14,7 +14,7 @@
 
 ---
 
-## 🏗️ Arquitetura
+## ️ Arquitetura
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -40,12 +40,13 @@
 │               RegistroVacinacaoService                      │
 │                                                             │
 │  • Regras de negócio                                        │
-│  • Cache in-memory: List<> + ConcurrentHashMap<id, obj>    │
+│  • Cache in-memory: synchronizedList + ConcurrentHashMap<id,obj> + newKeySet<coDoc> │
 │  • Carrega CSV no startup (@PostConstruct)                  │
 │  • Aceita upload de novo CSV via método dedicado            │
+│  • Separador ';', multi-encoding, multi-formato de data     │
 │  • Filtros via streams (sem query ao banco)                 │
 │  • Busca por ID em O(1) via Map                             │
-│  • Verifica duplicatas por co_documento                     │
+│  • Verifica duplicatas por co_documento em O(1) via Set     │
 │  • Lança exceções customizadas                              │
 └──────────────────────────┬──────────────────────────────────┘
                            │  Persiste/lê apenas no startup e CRUD
@@ -103,7 +104,7 @@
 
 ---
 
-## 📦 Estrutura de Pacotes
+##  Estrutura de Pacotes
 
 ```
 src/main/java/com/example/imunidata/
@@ -134,7 +135,7 @@ src/main/resources/
 
 ---
 
-## 🗃️ Entidade Principal — `RegistroVacinacao` (OpenDataSUS)
+## ️ Entidade Principal — `RegistroVacinacao` (OpenDataSUS)
 
 | Campo | Tipo | Coluna CSV | Descrição | Exemplo |
 |-------|------|------------|-----------|---------|
@@ -159,7 +160,7 @@ src/main/resources/
 
 ---
 
-## 🔌 Endpoints da API
+##  Endpoints da API
 
 > Base path: `api/v1/vacinacao`
 
@@ -203,7 +204,7 @@ Todos os parâmetros são opcionais e combináveis:
 
 ---
 
-## 🚀 Como executar localmente
+##  Como executar localmente
 
 ```bash
 # Compilar
@@ -267,30 +268,44 @@ curl http://localhost:8080/healthz
 
 ---
 
-## 📤 Upload de CSV
+##  Upload de CSV
 
 O endpoint `POST /api/v1/vacinacao/upload` aceita arquivos CSV no formato OpenDataSUS:
 
-- Tenta leitura em **UTF-8** e depois **ISO-8859-1** automaticamente
+- Separador: **`;`** (ponto e vírgula) — padrão dos arquivos exportados via pandas
+- Tenta leitura em **UTF-8** e depois **ISO-8859-1 (Latin-1)** automaticamente
+- Aceita datas nos formatos: `yyyy-MM-dd`, `dd/MM/yyyy`, `d/M/yyyy`, `yyyy/MM/dd`
 - Pula linhas inválidas (< 17 colunas) sem abortar
-- Ignora duplicatas por `co_documento` (não sobrescreve)
-- Retorna quantos registros foram inseridos
+- Ignora duplicatas por `co_documento` em O(1) via `ConcurrentHashMap.newKeySet()` (não sobrescreve)
+- Retorna quantos registros foram inseridos e uma mensagem explicativa caso seja 0
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/vacinacao/upload \
   -F "file=@vacinacao.csv"
 ```
-Resposta `200 OK`:
+Resposta `200 OK` com registros inseridos:
 ```json
 {
   "mensagem": "CSV carregado com sucesso",
   "registrosInseridos": 20
 }
 ```
+Resposta `200 OK` sem registros novos (todos duplicados ou com erro de parse):
+```json
+{
+  "mensagem": "CSV processado, mas nenhum registro novo foi inserido (verifique duplicatas ou erros no log)",
+  "registrosInseridos": 0
+}
+```
+
+> O CSV deve ter **17 colunas** separadas por `;`. Exemplo gerado via pandas:
+> ```python
+> df.to_csv("vacinacao.csv", sep=';', index=False, encoding='latin-1')
+> ```
 
 ---
 
-## 📊 Swagger UI
+##  Swagger UI
 
 | Interface | URL |
 |-----------|-----|
@@ -299,7 +314,7 @@ Resposta `200 OK`:
 
 ---
 
-## 🗄️ H2 Console
+## ️ H2 Console
 
 > ⚠️ Disponível apenas enquanto a JVM estiver rodando.
 
@@ -318,7 +333,7 @@ SELECT vacina, COUNT(*) FROM registro_vacinacao GROUP BY vacina;
 
 ---
 
-## 📋 Códigos HTTP
+##  Códigos HTTP
 
 | Código | Quando ocorre |
 |--------|---------------|
@@ -340,7 +355,7 @@ SELECT vacina, COUNT(*) FROM registro_vacinacao GROUP BY vacina;
 
 ---
 
-## 🌐 Deploy (Render / PaaS)
+##  Deploy (Render / PaaS)
 
 - Porta lida via `server.port=${PORT:8080}`
 - `HealthCheckScheduler` pinga `/healthz` a cada 60s para evitar hibernação
@@ -348,7 +363,7 @@ SELECT vacina, COUNT(*) FROM registro_vacinacao GROUP BY vacina;
 
 ---
 
-## 🛠️ Tecnologias
+## ️ Tecnologias
 
 | Tecnologia | Versão | Motivo |
 |------------|--------|--------|
@@ -362,7 +377,7 @@ SELECT vacina, COUNT(*) FROM registro_vacinacao GROUP BY vacina;
 
 ---
 
-## 📁 Documentação adicional
+##  Documentação adicional
 
 | Documento | Descrição |
 |-----------|-----------|

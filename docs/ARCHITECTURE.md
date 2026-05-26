@@ -33,7 +33,9 @@ Essa separação segue o padrão clássico de 4 camadas: Controller → Service 
 
 - O arquivo `vacinacao.csv` fica em `src/main/resources/data`.
 - `RegistroVacinacaoService.carregarDadosCSV()` usa OpenCSV para ler o arquivo no `@PostConstruct` e salva os registros no banco.
-- Datas são carregadas em formato ISO (`yyyy-MM-dd` ou `yyyy-MM-dd'T'HH:mm:ss`) e convertidas para `LocalDateTime` no momento do parse.
+- O parser é configurado com separador `;` (padrão dos arquivos OpenDataSUS exportados via pandas).
+- Datas são aceitas em múltiplos formatos: `yyyy-MM-dd`, `dd/MM/yyyy`, `d/M/yyyy`, `yyyy/MM/dd`.
+- Encoding: tenta UTF-8 primeiro; fallback automático para ISO-8859-1 (Latin-1), comum em arquivos do DATASUS.
 
 ## Health check e Agendador
 
@@ -74,6 +76,10 @@ Essa separação segue o padrão clássico de 4 camadas: Controller → Service 
 - `Optional` nos retornos do service/repository: deixa explícito quando um resultado pode ser ausente (p.ex. findById) e força o consumidor a tratar esse caso — reduz NullPointerException e melhora legibilidade do fluxo de controle.
 
 - `existsBy...` para checagem de duplicidade em vez de buscar listas inteiras: é mais eficiente (consulta booleana) e reduz uso de memória/overhead ao verificar existência de registros.
+
+- `ConcurrentHashMap.newKeySet()` para checagem de duplicatas por `co_documento`: substitui o antigo `cache.stream().anyMatch(...)` que era O(n) e causava `ConcurrentModificationException` ao iterar a lista enquanto outro registro era adicionado. O `Set` baseado em `ConcurrentHashMap` oferece verificação O(1) e é thread-safe sem locks explícitos.
+
+- `Collections.synchronizedList(new ArrayList<>())` para o cache principal: protege contra modificações concorrentes na lista quando upload de CSV e requisições de leitura ocorrem simultaneamente.
 
 - RequestLoggingFilter: registrar requisições e status em um formato simples (INFO/WARN/ERROR) facilita depuração e monitoramento no ambiente PaaS, onde log streaming geralmente é a principal fonte de observabilidade.
 

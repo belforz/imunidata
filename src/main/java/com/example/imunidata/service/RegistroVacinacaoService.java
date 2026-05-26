@@ -3,7 +3,9 @@ package com.example.imunidata.service;
 import com.example.imunidata.model.ErrorResponse;
 import com.example.imunidata.model.RegistroVacinacao;
 import com.example.imunidata.repository.RegistroVacinacaoRepository;
+import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
 import jakarta.annotation.PostConstruct;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
@@ -13,7 +15,10 @@ import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,11 +31,18 @@ public class RegistroVacinacaoService {
     private final RegistroVacinacaoRepository repository;
 
     // Cache in-memory
-    private final List<RegistroVacinacao> cache = new ArrayList<>();
+    private final List<RegistroVacinacao> cache = Collections.synchronizedList(new ArrayList<>());
     private final Map<Long, RegistroVacinacao> cacheById = new ConcurrentHashMap<>();
+    private final java.util.Set<String> coDocumentosCache = ConcurrentHashMap.newKeySet();
 
     public RegistroVacinacaoService(RegistroVacinacaoRepository repository) {
         this.repository = repository;
+    }
+
+    private CSVReader buildReader(java.io.Reader reader) {
+        return new CSVReaderBuilder(reader)
+                .withCSVParser(new CSVParserBuilder().withSeparator(';').build())
+                .build();
     }
 
     @PostConstruct
@@ -39,7 +51,7 @@ public class RegistroVacinacaoService {
         for (Charset charset : charsets) {
             try {
                 ClassPathResource resource = new ClassPathResource("data/vacinacao.csv");
-                try (CSVReader reader = new CSVReader(new InputStreamReader(resource.getInputStream(), charset))) {
+                try (CSVReader reader = buildReader(new InputStreamReader(resource.getInputStream(), charset))) {
                     reader.readNext();
                     String[] linha;
                     while ((linha = reader.readNext()) != null) {
@@ -55,7 +67,7 @@ public class RegistroVacinacaoService {
                                     parseIdade(linha[6]),  // nu_idade_paciente
                                     trim(linha[7]),   // no_fantasia_estabelecimento
                                     trim(linha[8]),   // ds_vacina
-                                    LocalDate.parse(trim(linha[9])),  // dt_vacina (yyyy-MM-dd)
+                                    parseData(trim(linha[9])),  // dt_vacina
                                     trim(linha[10]),  // ds_dose_vacina
                                     trim(linha[11]),  // ds_local_aplicacao
                                     trim(linha[12]),  // ds_via_administracao
@@ -67,6 +79,7 @@ public class RegistroVacinacaoService {
                             RegistroVacinacao saved = repository.save(reg);
                             cache.add(saved);
                             cacheById.put(saved.getId(), saved);
+                            if (saved.getCoDocumento() != null) coDocumentosCache.add(saved.getCoDocumento());
                         } catch (Exception e) {
                             System.err.println("Linha ignorada no CSV: " + e.getMessage());
                         }
@@ -86,40 +99,60 @@ public class RegistroVacinacaoService {
         }
         Charset[] charsets = { StandardCharsets.UTF_8, StandardCharsets.ISO_8859_1 };
         for (Charset charset : charsets) {
-            try (CSVReader reader = new CSVReader(new InputStreamReader(new java.io.FileInputStream(file), charset))) {
+            try (CSVReader reader = buildReader(new InputStreamReader(new java.io.FileInputStream(file), charset))) {
                 reader.readNext(); // pula cabeçalho
                 String[] linha;
                 int count = 0;
+                int ignoradas = 0;
                 while ((linha = reader.readNext()) != null) {
-                    if (linha.length < 17) continue;
+                    if (linha.length < 17) { ignoradas++; continue; }
                     try {
                         RegistroVacinacao reg = new RegistroVacinacao(
                                 trim(linha[0]), trim(linha[1]), trim(linha[2]), trim(linha[3]),
                                 trim(linha[4]), trim(linha[5]), parseIdade(linha[6]), trim(linha[7]),
-                                trim(linha[8]), LocalDate.parse(trim(linha[9])), trim(linha[10]),
+                                trim(linha[8]), parseData(trim(linha[9])), trim(linha[10]),
                                 trim(linha[11]), trim(linha[12]), trim(linha[13]), trim(linha[14]),
                                 trim(linha[15]), trim(linha[16])
                         );
                         // evita duplicatas pelo co_documento
                         if (reg.getCoDocumento() != null && !reg.getCoDocumento().isBlank()) {
-                            boolean existe = cache.stream().anyMatch(r -> reg.getCoDocumento().equals(r.getCoDocumento()));
-                            if (existe) continue;
+                            if (coDocumentosCache.contains(reg.getCoDocumento())) { ignoradas++; continue; }
                         }
                         RegistroVacinacao saved = repository.save(reg);
                         cache.add(saved);
                         cacheById.put(saved.getId(), saved);
+                        if (saved.getCoDocumento() != null) coDocumentosCache.add(saved.getCoDocumento());
                         count++;
                     } catch (Exception e) {
-                        System.err.println("Linha ignorada: " + e.getMessage());
+                        ignoradas++;
+                        System.err.println("Linha ignorada [" + e.getClass().getSimpleName() + "]: " + e.getMessage() + " | colunas=" + linha.length + " | linha=" + String.join(";", linha));
                     }
                 }
-                System.out.println("Arquivo CSV carregado: " + count + " novos registros (charset: " + charset + ")");
+                System.out.println("Arquivo CSV carregado: " + count + " novos registros, " + ignoradas + " ignoradas (charset: " + charset + ")");
                 return count;
             } catch (Exception e) {
                 System.err.println("Falha ao ler CSV com charset " + charset + ": " + e.getMessage());
             }
         }
         throw new ErrorResponse.GenericServiceException("Não foi possível processar o arquivo CSV");
+    }
+
+    private static final List<DateTimeFormatter> DATE_FORMATTERS = List.of(
+            DateTimeFormatter.ofPattern("yyyy-MM-dd"),
+            DateTimeFormatter.ofPattern("dd/MM/yyyy"),
+            DateTimeFormatter.ofPattern("d/M/yyyy"),
+            DateTimeFormatter.ofPattern("yyyy/MM/dd")
+    );
+
+    private LocalDate parseData(String value) {
+        if (value == null || value.isBlank()) return null;
+        String v = value.trim();
+        for (DateTimeFormatter fmt : DATE_FORMATTERS) {
+            try {
+                return LocalDate.parse(v, fmt);
+            } catch (DateTimeParseException ignored) {}
+        }
+        throw new IllegalArgumentException("Formato de data não reconhecido: '" + v + "'");
     }
 
     private String trim(String value) {
@@ -168,9 +201,7 @@ public class RegistroVacinacaoService {
 
     public RegistroVacinacao salvar(RegistroVacinacao registro) {
         if (registro.getCoDocumento() != null && !registro.getCoDocumento().isBlank()) {
-            boolean existe = cache.stream()
-                    .anyMatch(r -> registro.getCoDocumento().equals(r.getCoDocumento()));
-            if (existe) {
+            if (coDocumentosCache.contains(registro.getCoDocumento())) {
                 throw new ErrorResponse.ResourceAlreadyExistsException(
                         "Registro com co_documento '" + registro.getCoDocumento() + "' já existe");
             }
@@ -178,6 +209,7 @@ public class RegistroVacinacaoService {
         RegistroVacinacao saved = repository.save(registro);
         cache.add(saved);
         cacheById.put(saved.getId(), saved);
+        if (saved.getCoDocumento() != null) coDocumentosCache.add(saved.getCoDocumento());
         return saved;
     }
 
@@ -209,6 +241,7 @@ public class RegistroVacinacaoService {
             throw new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado");
         }
         cache.remove(existente);
+        if (existente.getCoDocumento() != null) coDocumentosCache.remove(existente.getCoDocumento());
         repository.deleteById(id);
     }
 }
