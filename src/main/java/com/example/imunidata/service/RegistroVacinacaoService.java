@@ -218,19 +218,24 @@ public class RegistroVacinacaoService {
         if (existente == null) {
             throw new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado");
         }
-        existente.setMunicipio(dados.getMunicipio());
-        existente.setEstado(dados.getEstado());
-        existente.setVacina(dados.getVacina());
-        existente.setDose(dados.getDose());
-        existente.setDataVacina(dados.getDataVacina());
-        existente.setIdade(dados.getIdade());
-        existente.setEstabelecimento(dados.getEstabelecimento());
-        existente.setLocalAplicacao(dados.getLocalAplicacao());
-        existente.setViaAdministracao(dados.getViaAdministracao());
-        existente.setLoteVacina(dados.getLoteVacina());
-        existente.setFabricante(dados.getFabricante());
-        existente.setEstrategia(dados.getEstrategia());
-        existente.setOrigemRegistro(dados.getOrigemRegistro());
+
+        if (dados.getCoDocumento() != null) existente.setCoDocumento(dados.getCoDocumento());
+        if (dados.getCoPaciente() != null) existente.setCoPaciente(dados.getCoPaciente());
+        if (dados.getSexo() != null) existente.setSexo(dados.getSexo());
+        if (dados.getRacaCor() != null) existente.setRacaCor(dados.getRacaCor());
+        if (dados.getMunicipio() != null) existente.setMunicipio(dados.getMunicipio());
+        if (dados.getEstado() != null) existente.setEstado(dados.getEstado());
+        if (dados.getIdade() != null) existente.setIdade(dados.getIdade());
+        if (dados.getEstabelecimento() != null) existente.setEstabelecimento(dados.getEstabelecimento());
+        if (dados.getVacina() != null) existente.setVacina(dados.getVacina());
+        if (dados.getDataVacina() != null) existente.setDataVacina(dados.getDataVacina());
+        if (dados.getDose() != null) existente.setDose(dados.getDose());
+        if (dados.getLocalAplicacao() != null) existente.setLocalAplicacao(dados.getLocalAplicacao());
+        if (dados.getViaAdministracao() != null) existente.setViaAdministracao(dados.getViaAdministracao());
+        if (dados.getLoteVacina() != null) existente.setLoteVacina(dados.getLoteVacina());
+        if (dados.getFabricante() != null) existente.setFabricante(dados.getFabricante());
+        if (dados.getEstrategia() != null) existente.setEstrategia(dados.getEstrategia());
+        if (dados.getOrigemRegistro() != null) existente.setOrigemRegistro(dados.getOrigemRegistro());
         repository.save(existente);
         return existente;
     }
@@ -240,7 +245,9 @@ public class RegistroVacinacaoService {
         if (existente == null) {
             throw new ErrorResponse.ResourceNotFoundException("Registro com ID " + id + " não encontrado");
         }
-        cache.remove(existente);
+        synchronized (cache) {
+            cache.removeIf(r -> id.equals(r.getId()));
+        }
         if (existente.getCoDocumento() != null) coDocumentosCache.remove(existente.getCoDocumento());
         repository.deleteById(id);
     }
